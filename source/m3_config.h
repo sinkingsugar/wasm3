@@ -104,7 +104,7 @@
 # endif
 
 # ifndef d_m3LogStackTrace
-#   define d_m3LogStackTrace                    0       // dump the call stack when traps occur
+#   define d_m3LogStackTrace                    1      // dump the call stack when traps occur
 # endif
 
 # ifndef d_m3LogNativeStack
