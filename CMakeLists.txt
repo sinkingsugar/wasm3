@@ -154,7 +154,17 @@ else()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror=shadow")
   endif()
 
-  set(CMAKE_C_FLAGS_RELEASE "-O3 ${WASM3_ARCH_FLAGS} -Wfatal-errors -fomit-frame-pointer -fno-stack-check -fno-stack-protector") #-fno-inline
+  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    set(INLINING_FLAGS -mllvm -inline-threshold=100000)
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    set(INLINING_FLAGS -finline-limit=100000)
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
+    # using Intel C++
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    # using Visual Studio C++
+  endif()
+  
+  set(CMAKE_C_FLAGS_RELEASE "-O3 ${WASM3_ARCH_FLAGS} ${INLINING_FLAGS} -Wfatal-errors -fomit-frame-pointer -fno-stack-check -fno-stack-protector") #-fno-inline
   set(CMAKE_EXE_LINKER_FLAGS_DEBUG "-O0")
   set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-O3")
 
