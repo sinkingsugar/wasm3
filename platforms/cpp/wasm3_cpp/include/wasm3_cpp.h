@@ -6,6 +6,7 @@
 #include <iostream>
 #include <vector>
 #include <memory>
+#include <string>
 #include <iterator>
 
 #include <m3_api_defs.h>
@@ -76,7 +77,7 @@ namespace wasm3 {
 
         template <typename Ret, typename ...Args, Ret (*Fn)(Args...)>
         struct wrap_helper<Fn> {
-            static const void *wrap_fn(IM3Runtime rt, stack_type sp, mem_type mem) {
+            static const void *wrap_fn(IM3Runtime rt, stack_type sp, mem_type mem, void* userdata) {
                 Ret *ret_ptr = (Ret *) (sp);
                 std::tuple<Args...> args;
                 get_args_from_stack(sp, mem, args);
@@ -88,7 +89,7 @@ namespace wasm3 {
 
         template <typename ...Args, void (*Fn)(Args...)>
         struct wrap_helper<Fn> {
-            static const void *wrap_fn(IM3Runtime rt, stack_type sp, mem_type mem) {
+            static const void *wrap_fn(IM3Runtime rt, stack_type sp, mem_type mem, void* userdata) {
                 std::tuple<Args...> args;
                 get_args_from_stack(sp, mem, args);
                 std::apply(Fn, args);

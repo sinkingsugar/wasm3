@@ -61,9 +61,13 @@ _           (ReadLEB_i7 (& form, & i_bytes, i_end));
             u32 numArgs;
 _           (ReadLEB_u32 (& numArgs, & i_bytes, i_end));
 
-_           (AllocFuncType (& ftype, numArgs));
-            ftype->numArgs = numArgs;
+            _throwif ("insane argument count", numArgs > d_m3MaxSaneFunctionArgCount);
 
+#if defined(M3_COMPILER_MSVC)
+            u8 argTypes[d_m3MaxSaneFunctionArgCount];
+#else
+            u8 argTypes[numArgs];
+#endif
             for (u32 a = 0; a < numArgs; ++a)
             {
                 i8 wasmType;
@@ -71,18 +75,28 @@ _           (AllocFuncType (& ftype, numArgs));
 _               (ReadLEB_i7 (& wasmType, & i_bytes, i_end));
 _               (NormalizeType (& argType, wasmType));
 
-                ftype->argTypes [a] = argType;
+                argTypes[a] = argType;
             }
 
-            u8 returnCount;
-_           (ReadLEB_u7 /* u1 in spec */ (& returnCount, & i_bytes, i_end));
+            u32 numRets;
+_           (ReadLEB_u32 (& numRets, & i_bytes, i_end));
 
-            if (returnCount)
+            _throwif ("insane returns count", numRets > d_m3MaxSaneFunctionArgCount);
+
+_           (AllocFuncType (& ftype, numRets + numArgs));
+            ftype->numArgs = numArgs;
+            ftype->numRets = numRets;
+
+            for (u32 r = 0; r < numRets; ++r)
             {
-                i8 returnType;
-_               (ReadLEB_i7 (& returnType, & i_bytes, i_end));
-_               (NormalizeType (& ftype->returnType, returnType));
-            }                                                                       m3log (parse, "    type %2d: %s", i, SPrintFuncTypeSignature (ftype));
+                i8 wasmType;
+                u8 retType;
+_               (ReadLEB_i7 (& wasmType, & i_bytes, i_end));
+_               (NormalizeType (& retType, wasmType));
+
+                ftype->types[r] = retType;
+            }
+            memcpy(ftype->types + numRets, argTypes, numArgs);                                m3log (parse, "    type %2d: %s", i, SPrintFuncTypeSignature (ftype));
 
             Environment_AddFuncType (io_module->environment, & ftype);
             io_module->funcTypes [i] = ftype;
@@ -213,6 +227,7 @@ _       (ReadLEB_u32 (& index, & i_bytes, i_end));                              
 
         if (exportKind == d_externalKind_function)
         {
+            _throwif(m3Err_wasmMalformed, index >= io_module->numFunctions);
             if (not io_module->functions [index].name)
             {
                 io_module->functions [index].name = utf8;
@@ -326,7 +341,7 @@ _                   (NormalizeType (& normalType, wasmType));
                 func->module = io_module;
                 func->wasm = start;
                 func->wasmEnd = i_bytes;
-                func->ownsWasmCode = io_module->hasWasmCodeCopy;
+                //func->ownsWasmCode = io_module->hasWasmCodeCopy;
                 func->numLocals = numLocals;
             }
             else _throw (m3Err_wasmSectionOverrun);
@@ -529,7 +544,7 @@ _   (m3Alloc (& module, M3Module, 1));
 
     module->name = ".unnamed";                                                      m3log (parse, "load module: %d bytes", i_numBytes);
     module->startFunction = -1;
-    module->hasWasmCodeCopy = false;
+    //module->hasWasmCodeCopy = false;
     module->environment = i_environment;
 
     const u8 * pos = i_bytes;
@@ -556,6 +571,7 @@ _       (ReadLEB_u7 (& section, & pos, end));
         {
             u32 sectionLength;
 _           (ReadLEB_u32 (& sectionLength, & pos, end));
+			_throwif(m3Err_wasmMalformed, pos + sectionLength > end);
 _           (ParseModuleSection (module, section, pos, sectionLength));
 
             pos += sectionLength;
