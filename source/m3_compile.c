@@ -938,7 +938,7 @@ M3Result  Compile_Const_f32  (IM3Compilation o, m3opcode_t i_opcode)
 
     union { u32 u; f32 f; } value = { 0 };
 
-_   (Read_f32 (& value.f, & o->wasm, o->wasmEnd));              m3log (compile, d_indent " (const f32 = %f)", get_indention_string (o), value.f);
+_   (Read_f32 (& value.f, & o->wasm, o->wasmEnd));              m3log (compile, d_indent " (const f32 = %" PRIf32 ")", get_indention_string (o), value.f);
 _   (PushConst (o, value.u, c_m3Type_f32));
 
     _catch: return result;
@@ -951,7 +951,7 @@ M3Result  Compile_Const_f64  (IM3Compilation o, m3opcode_t i_opcode)
 
     union { u64 u; f64 f; } value = { 0 };
 
-_   (Read_f64 (& value.f, & o->wasm, o->wasmEnd));              m3log (compile, d_indent " (const f64 = %lf)", get_indention_string (o), value.f);
+_   (Read_f64 (& value.f, & o->wasm, o->wasmEnd));              m3log (compile, d_indent " (const f64 = %" PRIf64 ")", get_indention_string (o), value.f);
 _   (PushConst (o, value.u, c_m3Type_f64));
 
     _catch: return result;
@@ -2176,12 +2176,14 @@ M3Result  Compile_BlockStatements  (IM3Compilation o)
         }
 #endif
 
-        M3Compiler compiler = GetOpInfo(opcode)->compiler;
+        IM3OpInfo opinfo = GetOpInfo(opcode);
+        _throwif(m3Err_unknownOpcode, opinfo == NULL);
 
-        if (not compiler)
-            compiler = Compile_Operator;
-
-        result = (* compiler) (o, opcode);
+        if (opinfo->compiler) {
+            result = (* opinfo->compiler) (o, opcode);
+        } else {
+            result = Compile_Operator(o, opcode);
+        }
 
         o->previousOpcode = opcode;                             //                      m3logif (stack, dump_type_stack (o))
 
@@ -2194,7 +2196,7 @@ M3Result  Compile_BlockStatements  (IM3Compilation o)
         if (opcode == c_waOp_end or opcode == c_waOp_else)
             break;
     }
-
+_catch:
     return result;
 }
 

@@ -1,4 +1,4 @@
-import m3
+import wasm3 as m3
 
 FIB32_WASM = bytes.fromhex(
     "00 61 73 6d 01 00 00 00 01 06 01 60 01 7f 01 7f"
@@ -54,8 +54,9 @@ def test_m3(capfd):
     assert func.call_argv('10') == 55
     assert func.name == 'fib'
     assert func.num_args == 1
-    assert func.return_type == 1
+    assert func.num_rets == 1
     assert func.arg_types == (1,)
+    assert func.ret_types == (1,)
     assert func(0) == 0
     assert func(1) == 1
     rt.load(env.parse_module(ADD_WASM))

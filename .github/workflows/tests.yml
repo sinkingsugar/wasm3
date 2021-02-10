@@ -144,7 +144,7 @@ jobs:
         pip3 --version
     - name: Install Wasienv
       env:
-        WASMER_RELEASE_TAG: "0.17.1"
+        WASMER_RELEASE_TAG: "1.0.1"
       run: curl https://raw.githubusercontent.com/wasienv/wasienv/master/install.sh | sh
     - name: Configure
       run: |
@@ -168,7 +168,6 @@ jobs:
       run: |
         mkdir build
         cd build
-        export CFLAGS="-Dd_m3LogOutput=0"
         cmake ..
     - name: Build (native)
       run: |
@@ -208,10 +207,51 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: 1.8
+    - name: Install NDK
+      run: |
+        sudo ${ANDROID_HOME}/tools/bin/sdkmanager --install "ndk;22.0.7026061"
     - name: Build
       run: |
         cd platforms/android
         ./gradlew build
+        
+  build-cosmopolitan:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build αcτµαlly pδrταblε εxεcµταblε
+      run: |
+        cd platforms/cosmopolitan
+        gcc -v
+        ./build.sh
+    - name: Prepare tests
+      run: |
+        cd test
+        cp ../platforms/cosmopolitan/wasm3.com ./wasm3-lin.com
+        cp ../platforms/cosmopolitan/wasm3.com ./wasm3-win.com
+        sudo sh -c "echo ':APE:M::MZqFpD::/bin/sh:' >/proc/sys/fs/binfmt_misc/register"
+    - name: Test WebAssembly spec
+      run: |
+        cd test
+        python3 run-spec-test.py --exec "./wasm3-lin.com --repl"
+    - name: Test WASI apps
+      run: |
+        cd test
+        python3 run-wasi-test.py --fast --exec "./wasm3-lin.com"
+    - name: Install Wine64
+      run: |
+        sudo apt install wine64
+        wine --version
+    - name: Test WebAssembly spec (in Wine)
+      run: |
+        cd test
+        python3 run-spec-test.py --exec "wine ./wasm3-win.com --repl"
+    - name: Test WASI apps (in Wine)
+      run: |
+        cd test
+        python3 run-wasi-test.py --fast --exec "wine ./wasm3-win.com"
 
   build-cross-qemu:
     runs-on: ubuntu-latest
@@ -496,11 +536,12 @@ jobs:
             -o wasm3
     - name: Test
       run: ./build/wasm3 ./test/wasi/test.wasm
+
   build-python:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.5, 3.6, 3.7, 3.8]
+        python-version: [ 3.5, 3.6, 3.7, 3.8 ]
 
     steps:
     - uses: actions/checkout@v2
@@ -508,10 +549,12 @@ jobs:
       uses: actions/setup-python@v1
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Build python module
+    - name: Build Python module
       run: |
-        pip install .
-    - name: Test with pytest
+        cd platforms/python
+        python setup.py sdist
+        pip install ./dist/pywasm3-*.tar.gz
+    - name: Test
       run: |
         pip install pytest
-        pytest platforms/python/test
+        pytest platforms/python
