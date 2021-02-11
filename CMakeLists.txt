@@ -90,10 +90,10 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DDEBUG=1")
 
 if(EMSCRIPTEN OR EMSCRIPTEN_LIB)
 
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s GLOBAL_BASE=1024 -s TOTAL_STACK=2MB -s INITIAL_MEMORY=4MB -s ALLOW_MEMORY_GROWTH")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s ALLOW_MEMORY_GROWTH=1")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s EXPORTED_FUNCTIONS=\"[\\\"_malloc\\\",\\\"_free\\\"]\"")
 
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -flto -Wfatal-errors -s ASSERTIONS=0")
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -flto -Wfatal-errors -s ASSERTIONS=0 -mllvm -inline-threshold=100000 -fomit-frame-pointer -fno-stack-check -fno-stack-protector")
   set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} --strip-all --gc-sections")
 
   if(WASM_EXT)
@@ -162,7 +162,7 @@ else()
   elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     # using Visual Studio C++
   endif()
-  
+
   set(CMAKE_C_FLAGS_RELEASE "-O3 ${WASM3_ARCH_FLAGS} ${INLINING_FLAGS} -Wfatal-errors -fomit-frame-pointer -fno-stack-check -fno-stack-protector") #-fno-inline
   set(CMAKE_EXE_LINKER_FLAGS_DEBUG "-O0")
   set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-O3")
