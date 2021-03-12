@@ -24,7 +24,6 @@
 IM3Environment env;
 IM3Runtime runtime;
 
-
 M3Result link_all  (IM3Module module)
 {
     M3Result res;
@@ -66,7 +65,7 @@ M3Result repl_load  (const char* fn)
     if (fsize < 8) {
         return "file is too small";
     } else if (fsize > 10*1024*1024) {
-        return "file too big";
+        return "file is too big";
     }
 
     wasm = (u8*) malloc(fsize);
@@ -136,6 +135,33 @@ M3Result repl_load_hex  (u32 fsize)
     return result;
 }
 
+void print_backtrace()
+{
+    IM3BacktraceInfo info = m3_GetBacktrace(runtime);
+    if (!info) {
+        return;
+    }
+
+    fprintf(stderr, "==== wasm backtrace:");
+
+    int frameCount = 0;
+    IM3BacktraceFrame curr = info->frames;
+    while (curr)
+    {
+        fprintf(stderr, "\n  %d: 0x%06x - %s!%s",
+                           frameCount, curr->moduleOffset,
+                           m3_GetModuleName (m3_GetFunctionModule(curr->function)),
+                           m3_GetFunctionName (curr->function)
+               );
+        curr = curr->next;
+        frameCount++;
+    }
+    if (info->lastFrame == M3_BACKTRACE_TRUNCATED) {
+        fprintf(stderr, "\n  (truncated)");
+    }
+    fprintf(stderr, "\n");
+}
+
 M3Result repl_call  (const char* name, int argc, const char* argv[])
 {
     IM3Function func;
@@ -152,11 +178,7 @@ M3Result repl_call  (const char* name, int argc, const char* argv[])
         wasi_ctx->argc = argc;
         wasi_ctx->argv = argv;
 
-        IM3Function func;
-        M3Result result = m3_FindFunction (&func, runtime, "_start");
-        if (result) return result;
-
-        result = m3_CallArgV(func, 0, NULL);
+        result = m3_CallArgv(func, 0, NULL);
 
         if (result == m3Err_trapExit) {
             exit(wasi_ctx->exit_code);
@@ -176,7 +198,7 @@ M3Result repl_call  (const char* name, int argc, const char* argv[])
         return "too many arguments";
     }
 
-    result = m3_CallArgV (func, argc, argv);
+    result = m3_CallArgv (func, argc, argv);
     if (result) return result;
 
     static uint64_t    valbuff[128];
@@ -455,7 +477,8 @@ int  main  (int i_argc, const char* i_argv[])
                 if (argDumpOnTrap) {
                     repl_dump();
                 }
-                FATAL("repl_call: %s", result);
+                print_backtrace();
+                goto _onfatal;
             }
         }
     }
@@ -495,17 +518,18 @@ int  main  (int i_argc, const char* i_argv[])
         } else {
             unescape(argv[0]);
             result = repl_call(argv[0], argc-1, (const char**)(argv+1));
+            if (result) {
+                print_backtrace();
+            }
         }
 
-        if (result) {
+        if (result == m3Err_trapExit) {
+            //TODO: fprintf(stderr, M3_ARCH "-wasi: exit(%d)\n", runtime->exit_code);
+        } else if (result) {
             fprintf (stderr, "Error: %s", result);
             M3ErrorInfo info;
             m3_GetErrorInfo (runtime, &info);
             fprintf (stderr, " (%s)\n", info.message);
-            //TODO: if (result == m3Err_trapExit) {
-                // warn that exit was called
-            //    fprintf(stderr, M3_ARCH "-wasi: exit(%d)\n", runtime->exit_code);
-            //}
         }
     }
 

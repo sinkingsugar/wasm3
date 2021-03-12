@@ -32,6 +32,10 @@
 #   define d_m3MaxConstantTableSize             120
 # endif
 
+# ifndef d_m3MaxDuplicateFunctionImpl
+#   define d_m3MaxDuplicateFunctionImpl         3
+# endif
+
 # ifndef d_m3VerboseLogs
 #   define d_m3VerboseLogs                      1
 # endif
@@ -53,6 +57,9 @@
 #   define d_m3ProfilerSlotMask                 0xFFFF
 # endif
 
+# ifndef d_m3RecordBacktraces
+#   define d_m3RecordBacktraces                 0
+# endif
 
 // profiling and tracing ------------------------------------------------------
 
@@ -65,7 +72,9 @@
 # endif
 
 # ifndef d_m3EnableStrace
-#   define d_m3EnableStrace                     0       // trace exported function calls
+#   define d_m3EnableStrace                     0       // 1 - trace exported function calls
+                                                        // 2 - trace all calls (structured) - requires DEBUG
+                                                        // 3 - all calls + loops + memory operations
 # endif
 
 
@@ -95,16 +104,8 @@
 #   define d_m3LogCodePages                     0       // dump metacode pages when released
 # endif
 
-# ifndef d_m3LogExec
-#   define d_m3LogExec                          0       // low-level interpreter specific logs
-# endif
-
 # ifndef d_m3LogRuntime
 #   define d_m3LogRuntime                       0       // higher-level runtime information
-# endif
-
-# ifndef d_m3LogStackTrace
-#   define d_m3LogStackTrace                    1      // dump the call stack when traps occur
 # endif
 
 # ifndef d_m3LogNativeStack

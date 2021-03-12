@@ -76,11 +76,15 @@ _   (m3ReallocArray (& io_module->functions, M3Function, io_module->numFunctions
 
     IM3Function func = Module_GetFunction (io_module, index);
     func->funcType = ft;
+#if d_m3EnableStrace >= 2
+    func->index = index;
+#endif
 
-    if (i_importInfo)
+    if (i_importInfo and func->numNames == 0)
     {
         func->import = * i_importInfo;
-        func->name = i_importInfo->fieldUtf8;
+        func->numNames = 1;
+        func->names[0] = i_importInfo->fieldUtf8;
     }
 
     //          m3log (module, "   added function: %3d; sig: %d", index, i_typeIndex);
@@ -99,3 +103,18 @@ IM3Function  Module_GetFunction  (IM3Module i_module, u32 i_functionIndex)
 
     return func;
 }
+
+
+const char*  m3_GetModuleName  (IM3Module i_module)
+{
+    if (!i_module || !i_module->name)
+        return "<unknown>";
+
+    return i_module->name;
+}
+
+IM3Runtime  m3_GetModuleRuntime  (IM3Module i_module)
+{
+    return i_module ? i_module->runtime : NULL;
+}
+

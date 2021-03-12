@@ -15,10 +15,12 @@ jobs:
         - {target: clang,       cc: clang,      }
         - {target: clang-x86,   cc: clang,      flags: -DCMAKE_C_FLAGS="-m32",    install: "gcc-multilib"   }
         - {target: gcc,         cc: gcc,        }
-        - {target: gcc-debug,   cc: gcc,        flags: -DCMAKE_BUILD_TYPE=Debug   }
         # Builds without uvwasi
         - {target: gcc-no-uvwasi,   cc: gcc,    flags: -DBUILD_WASI=simple   }
         - {target: clang-no-uvwasi, cc: clang,  flags: -DBUILD_WASI=simple   }
+        # Debug builds
+        - {target: gcc-debug,               cc: gcc,    flags: -DCMAKE_BUILD_TYPE=Debug                         }
+        - {target: clang-no-uvwasi-debug,   cc: clang,  flags: -DCMAKE_BUILD_TYPE=Debug -DBUILD_WASI=simple     }
 
         # TODO: fails on numeric operations
         #- {target: gcc-x86,     cc: gcc,        flags: "-m32",                    install: "gcc-multilib"   }
@@ -28,11 +30,11 @@ jobs:
     - name: Install ${{ matrix.config.install }}
       if: ${{ matrix.config.install }}
       run: |
-        sudo apt update
         sudo apt install ${{ matrix.config.install }}
     - name: Configure
       env:
         CC: ${{ matrix.config.cc }}
+        CFLAGS: ${{ matrix.config.cflags }}
       run: |
         mkdir build
         cd build
@@ -111,6 +113,10 @@ jobs:
         - {target: clang-x86-no-uvwasi,   platform: "-A Win32",   toolset: "-T ClangCL",  flags: "-DBUILD_WASI=simple"   }
         - {target: msvc-x86-no-uvwasi,    platform: "-A Win32",   toolset: "",            flags: "-DBUILD_WASI=simple"   }
 
+    defaults:
+      run:
+        shell: cmd
+
     steps:
     - uses: actions/checkout@v2
     - name: Configure
@@ -144,14 +150,14 @@ jobs:
         pip3 --version
     - name: Install Wasienv
       env:
-        WASMER_RELEASE_TAG: "1.0.1"
+        WASMER_RELEASE_TAG: "1.0.2"
       run: curl https://raw.githubusercontent.com/wasienv/wasienv/master/install.sh | sh
     - name: Configure
       run: |
         source $HOME/.wasienv/wasienv.sh
         mkdir build-wasi
         cd build-wasi
-        wasimake cmake -DBUILD_WASI=metawasi ..
+        wasimake cmake ..
     - name: Build
       run: |
         source $HOME/.wasienv/wasienv.sh
@@ -160,9 +166,13 @@ jobs:
       run: |
         source $HOME/.wasmer/wasmer.sh
         cd test
-        python3 run-spec-test.py --exec "wasmer run --dir=. ../build-wasi/wasm3.wasm -- --repl"
+        python3 run-spec-test.py --exec "wasmer run --mapdir=/:. ../build-wasi/wasm3.wasm -- --repl"
 
-    # TODO: Test WASI apps in Wasmer
+    - name: Test WASI apps (in Wasmer)
+      run: |
+        source $HOME/.wasmer/wasmer.sh
+        cd test
+        python3 run-wasi-test.py --exec "wasmer run --mapdir=/:. ../build-wasi/wasm3.wasm --" --fast
 
     - name: Configure (native)
       run: |
@@ -254,7 +264,7 @@ jobs:
         python3 run-wasi-test.py --fast --exec "wine ./wasm3-win.com"
 
   build-cross-qemu:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: build-cross-qemu-${{ matrix.config.target }}
     timeout-minutes: 10
 
@@ -287,22 +297,16 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install QEMU
-      env:
-        QEMU_SRC: "http://archive.ubuntu.com/ubuntu/pool/universe/q/qemu"
-        QEMU_VER: "qemu-user-static_4\\.2-.*_amd64.deb$"
       run: |
-        DEB=`curl -s $QEMU_SRC/ | grep -o -E 'href="([^"#]+)"' | cut -d'"' -f2 | grep $QEMU_VER | tail -1`
-        wget $QEMU_SRC/$DEB
-        sudo dpkg -i $DEB
+        sudo apt install qemu-user-static
     - name: Install ${{ matrix.config.toolchain }}
       run: |
-        sudo apt update
         sudo apt install ${{ matrix.config.toolchain }}
     - name: Build
       run: |
         mkdir build
         cd build
-        ${{ matrix.config.cc }} -DASSERTS -Dd_m3HasWASI \
+        ${{ matrix.config.cc }} -DASSERTS -Dd_m3HasWASI ${{ matrix.config.cflags }} \
             -I../source ../source/*.c ../platforms/app/main.c \
             -O3 -g0 -flto -lm -static \
             -o wasm3
@@ -482,7 +486,7 @@ jobs:
             -O3 -g0 -lm \
             -o wasm3
     - name: Test
-      run: ./build/wasm3 ./test/wasi/test.wasm
+      run: ./build/wasm3 ./test/wasi/simple/test.wasm
 
   build-with-logs:
     name: maintenance (debug logs)
@@ -504,15 +508,13 @@ jobs:
             -Dd_m3LogWasmStack=1        \
             -Dd_m3LogEmit=1             \
             -Dd_m3LogCodePages=1        \
-            -Dd_m3LogExec=1             \
             -Dd_m3LogRuntime=1          \
-            -Dd_m3LogStackTrace=1       \
             -Dd_m3LogNativeStack=1      \
             -I../source ../source/*.c ../platforms/app/main.c \
             -O3 -g0 -lm \
             -o wasm3
     - name: Test
-      run: ./build/wasm3 ./test/wasi/test.wasm > /dev/null
+      run: ./build/wasm3 ./test/wasi/simple/test.wasm > /dev/null
 
   build-preprocessed-ops:
     name: maintenance (preprocess ops)
@@ -523,7 +525,6 @@ jobs:
     - uses: actions/checkout@v2
     - name: Install sponge
       run: |
-        sudo apt update
         sudo apt install moreutils
     - name: Build
       run: |
@@ -535,13 +536,14 @@ jobs:
             -O3 -g0 -lm \
             -o wasm3
     - name: Test
-      run: ./build/wasm3 ./test/wasi/test.wasm
+      run: ./build/wasm3 ./test/wasi/simple/test.wasm
 
   build-python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
+      fail-fast: false
       matrix:
-        python-version: [ 3.5, 3.6, 3.7, 3.8 ]
+        python-version: [ "3.5", "3.6", "3.7", "3.8", "3.9" ]
 
     steps:
     - uses: actions/checkout@v2
@@ -554,6 +556,9 @@ jobs:
         cd platforms/python
         python setup.py sdist
         pip install ./dist/pywasm3-*.tar.gz
+    - name: Install WABT
+      run: |
+        sudo apt install wabt
     - name: Test
       run: |
         pip install pytest

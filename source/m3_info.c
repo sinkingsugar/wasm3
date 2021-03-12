@@ -201,7 +201,8 @@ d_m3Decoder (Entry)
 {
     IM3Function function = fetch (IM3Function);
 
-    sprintf (o_string, "%s", function->name);
+    // only prints out the first registered name for the function
+    sprintf (o_string, "%s", m3_GetFunctionName(function));
 }
 
 
