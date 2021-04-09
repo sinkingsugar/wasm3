@@ -171,9 +171,9 @@ else()
   endif()
 
   if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-    set(INLINING_FLAGS -mllvm -inline-threshold=100000)
+    set(INLINING_FLAGS "-mllvm -inline-threshold=100000")
   elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    set(INLINING_FLAGS -finline-limit=100000)
+    set(INLINING_FLAGS "-finline-limit=100000")
   elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
     # using Intel C++
   elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
