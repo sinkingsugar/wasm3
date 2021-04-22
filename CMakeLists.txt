@@ -25,7 +25,7 @@ else()
 endif()
 set_property(CACHE BUILD_WASI PROPERTY STRINGS none simple uvwasi metawasi)
 
-# set(BUILD_NATIVE "Build with machine-specific optimisations" ON)
+option(BUILD_NATIVE "Build with machine-specific optimisations" OFF)
 
 set(OUT_FILE "wasm3")
 
@@ -41,6 +41,7 @@ if(CLANG OR CLANG_SUFFIX)
   set(CMAKE_C_FLAGS      "${CMAKE_C_FLAGS} -fuse-ld=lld")
 
   if(BUILD_FUZZ)
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
     set(OUT_FILE         "wasm3-fuzzer")
     set(APP_DIR          "platforms/app_fuzz")
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "set build type to Debug")
@@ -201,8 +202,8 @@ elseif(BUILD_WASI MATCHES "uvwasi")
   include(FetchContent)
   FetchContent_Declare(
     uvwasi
-    GIT_REPOSITORY https://github.com/nodejs/uvwasi.git
-    GIT_TAG v0.0.11
+    GIT_REPOSITORY https://github.com/vshymanskyy/uvwasi.git
+    GIT_TAG b063d686848c32a26119513056874f051c74258a
   )
 
   FetchContent_GetProperties(uvwasi)

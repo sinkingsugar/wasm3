@@ -11,11 +11,25 @@
 #include <ctype.h>
 
 #include "wasm3.h"
+#include "m3_api_defs.h"
 #include "m3_api_wasi.h"
 #include "m3_api_libc.h"
 #include "m3_api_tracer.h"
 
-#define FATAL(msg, ...) { printf("Error: [Fatal] " msg "\n", ##__VA_ARGS__); goto _onfatal; }
+// TODO: remove
+#include "m3_env.h"
+
+/*
+ * NOTE: Gas metering/limit only applies to pre-instrumented modules.
+ * You can generate a metered version from any wasm file automatically, using
+ *   https://github.com/ewasm/wasm-metering
+ */
+#define GAS_LIMIT       500000000
+#define GAS_FACTOR      10000LL
+
+#define MAX_MODULES     16
+
+#define FATAL(msg, ...) { fprintf(stderr, "Error: [Fatal] " msg "\n", ##__VA_ARGS__); goto _onfatal; }
 
 #if defined(d_m3HasWASI) || defined(d_m3HasMetaWASI) || defined(d_m3HasUVWASI)
 #define LINK_WASI
@@ -23,6 +37,29 @@
 
 IM3Environment env;
 IM3Runtime runtime;
+
+u8* wasm_bins[MAX_MODULES];
+int wasm_bins_qty = 0;
+
+#if defined(GAS_LIMIT)
+
+static int64_t current_gas = GAS_FACTOR * GAS_LIMIT;
+static bool is_gas_metered = false;
+
+m3ApiRawFunction(metering_usegas)
+{
+    m3ApiGetArg     (int32_t, gas)
+
+    current_gas -= gas;
+
+    if (UNLIKELY(current_gas < 0)) {
+        m3ApiTrap("[trap] Out of gas");
+    }
+    m3ApiSuccess();
+}
+
+#endif // GAS_LIMIT
+
 
 M3Result link_all  (IM3Module module)
 {
@@ -43,13 +80,31 @@ M3Result link_all  (IM3Module module)
     if (res) return res;
 #endif
 
+#if defined(GAS_LIMIT)
+    res = m3_LinkRawFunction (module, "metering", "usegas", "v(i)", &metering_usegas);
+    if (!res) {
+        fprintf(stderr, "Warning: Gas is limited to %0.4f\n", (double)(current_gas) / GAS_FACTOR);
+        is_gas_metered = true;
+    }
+    if (res == m3Err_functionLookupFailed) { res = NULL; }
+#endif
+
     return res;
 }
 
+const char* modname_from_fn(const char* fn)
+{
+	const char* off = strrchr(fn, '/');
+	if (off) return off+1;
+	off = strrchr(fn, '\\');
+	if (off) return off+1;
+	return fn;
+}
 
 M3Result repl_load  (const char* fn)
 {
     M3Result result = m3Err_none;
+    IM3Module module = NULL;
 
     u8* wasm = NULL;
     u32 fsize = 0;
@@ -63,29 +118,47 @@ M3Result repl_load  (const char* fn)
     fseek (f, 0, SEEK_SET);
 
     if (fsize < 8) {
-        return "file is too small";
-    } else if (fsize > 10*1024*1024) {
-        return "file is too big";
+        result = "file is too small";
+        goto on_error;
+    } else if (fsize > 64*1024*1024) {
+        result = "file is too big";
+        goto on_error;
     }
 
     wasm = (u8*) malloc(fsize);
     if (!wasm) {
-        return "cannot allocate memory for wasm binary";
+        result = "cannot allocate memory for wasm binary";
+        goto on_error;
     }
 
     if (fread (wasm, 1, fsize, f) != fsize) {
-        return "cannot read file";
+        result = "cannot read file";
+        goto on_error;
     }
     fclose (f);
+    f = NULL;
 
-    IM3Module module;
     result = m3_ParseModule (env, &module, wasm, fsize);
-    if (result) return result;
+    if (result) goto on_error;
 
     result = m3_LoadModule (runtime, module);
-    if (result) return result;
+    if (result) goto on_error;
+
+    m3_SetModuleName(module, modname_from_fn(fn));
 
     result = link_all (module);
+    if (result) goto on_error;
+
+    if (wasm_bins_qty < MAX_MODULES) {
+        wasm_bins[wasm_bins_qty++] = wasm;
+    }
+
+    return result;
+
+on_error:
+    m3_FreeModule(module);
+    if (wasm) free(wasm);
+    if (f) fclose(f);
 
     return result;
 }
@@ -199,6 +272,13 @@ M3Result repl_call  (const char* name, int argc, const char* argv[])
     }
 
     result = m3_CallArgv (func, argc, argv);
+
+#if defined(GAS_LIMIT)
+    if (is_gas_metered) {
+        fprintf(stderr, "Gas used: %0.4f\n", (double)((GAS_FACTOR * GAS_LIMIT) - current_gas) / GAS_FACTOR);
+    }
+#endif
+
     if (result) return result;
 
     static uint64_t    valbuff[128];
@@ -272,23 +352,64 @@ M3Result repl_invoke  (const char* name, int argc, const char* argv[])
     result = m3_GetResults (func, ret_count, valptrs);
     if (result) return result;
 
+    fprintf (stderr, "Result: ");
     if (ret_count <= 0) {
-        fprintf (stderr, "Result: <Empty Stack>\n");
+        fprintf (stderr, "<Empty Stack>");
     }
     for (int i = 0; i < ret_count; i++) {
         switch (m3_GetRetType(func, i)) {
-        case c_m3Type_i32:
-        case c_m3Type_f32:
-            fprintf (stderr, "Result: %" PRIu32 "\n", *(u32*)valptrs[i]);  break;
-        case c_m3Type_i64:
-        case c_m3Type_f64:
-            fprintf (stderr, "Result: %" PRIu64 "\n", *(u64*)valptrs[i]);  break;
+        case c_m3Type_i32: fprintf (stderr, "%" PRIu32 ":i32", *(u32*)valptrs[i]);  break;
+        case c_m3Type_f32: fprintf (stderr, "%" PRIu32 ":f32", *(u32*)valptrs[i]);  break;
+        case c_m3Type_i64: fprintf (stderr, "%" PRIu64 ":i64", *(u64*)valptrs[i]);  break;
+        case c_m3Type_f64: fprintf (stderr, "%" PRIu64 ":f64", *(u64*)valptrs[i]);  break;
         default: return "unknown return type";
         }
+        if (i != ret_count-1) {
+            fprintf (stderr, ", ");
+        }
     }
+    fprintf (stderr, "\n");
 
     return result;
 }
+
+M3Result repl_global_get  (const char* name)
+{
+    IM3Global g = m3_FindGlobal(runtime->modules, name);
+
+    M3TaggedValue tagged;
+    M3Result err = m3_GetGlobal (g, &tagged);
+    if (err) return err;
+
+    switch (tagged.type) {
+	case c_m3Type_i32:  fprintf (stderr, "%" PRIu32 ":i32\n", tagged.value.i32);  break;
+	case c_m3Type_i64:  fprintf (stderr, "%" PRIu64 ":i64\n", tagged.value.i64);  break;
+	case c_m3Type_f32:  fprintf (stderr, "%" PRIf32 ":f32\n", tagged.value.f32);  break;
+	case c_m3Type_f64:  fprintf (stderr, "%" PRIf64 ":f64\n", tagged.value.f64);  break;
+	default:            return m3Err_invalidTypeId;
+    }
+    return m3Err_none;
+}
+
+M3Result repl_global_set  (const char* name, const char* value)
+{
+    IM3Global g = m3_FindGlobal(runtime->modules, name);
+
+    M3TaggedValue tagged = {
+        .type      = m3_GetGlobalType(g)
+    };
+
+    switch (tagged.type) {
+	case c_m3Type_i32:  tagged.value.i32 = strtoul(value, NULL, 10);  	break;
+	case c_m3Type_i64:  tagged.value.i64 = strtoull(value, NULL, 10);  	break;
+	case c_m3Type_f32:  tagged.value.f32 = strtod(value, NULL); 		break;
+	case c_m3Type_f64:  tagged.value.f64 = strtod(value, NULL);			break;
+	default:            return m3Err_invalidTypeId;
+    }
+
+    return m3_SetGlobal (g, &tagged);
+}
+
 
 M3Result repl_dump()
 {
@@ -312,6 +433,11 @@ void repl_free()
     if (runtime) {
         m3_FreeRuntime (runtime);
         runtime = NULL;
+    }
+
+    for (int i = 0; i < wasm_bins_qty; i++) {
+        free (wasm_bins[i]);
+        wasm_bins[i] = NULL;
     }
 }
 
@@ -508,6 +634,10 @@ int  main  (int i_argc, const char* i_argv[])
             result = repl_load(argv[1]);
         } else if (!strcmp(":load-hex", argv[0])) {         // :load-hex <size>\n <hex-encoded-binary>
             result = repl_load_hex(atol(argv[1]));
+        } else if (!strcmp(":get-global", argv[0])) {
+            result = repl_global_get(argv[1]);
+        } else if (!strcmp(":set-global", argv[0])) {
+            result = repl_global_set(argv[1], argv[2]);
         } else if (!strcmp(":dump", argv[0])) {
             result = repl_dump();
         } else if (!strcmp(":invoke", argv[0])) {

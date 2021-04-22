@@ -1,11 +1,15 @@
 name: tests
 
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore: ['**.md', '**.svg', '**.png']
+  pull_request:
+    paths-ignore: ['**.md', '**.svg', '**.png']
 
 jobs:
-  build-linux:
+  linux:
     runs-on: ubuntu-latest
-    name: build-linux-${{ matrix.config.target }}
+    name: linux-${{ matrix.config.target }}
     timeout-minutes: 10
 
     strategy:
@@ -44,10 +48,14 @@ jobs:
         cmake --build build
     - name: Test WebAssembly spec
       run: cd test && python3 run-spec-test.py
+    - name: Test previous WebAssembly specs
+      run: |
+        cd test
+        python3 run-spec-test.py --spec=v1.1
     - name: Test WASI apps
       run: cd test && python3 run-wasi-test.py
 
-  build-linux-alpine:
+  linux-alpine:
     runs-on: ubuntu-latest
     container: alpine:3.10
 
@@ -67,9 +75,9 @@ jobs:
     - name: Test WASI apps
       run: cd test && python3 run-wasi-test.py
 
-  build-mac:
+  macos:
     runs-on: macos-latest
-    name: build-mac-${{ matrix.config.target }}
+    name: macos-${{ matrix.config.target }}
     timeout-minutes: 10
 
     strategy:
@@ -91,12 +99,16 @@ jobs:
         cmake --build build
     - name: Test WebAssembly spec
       run: cd test && python3 run-spec-test.py
+    - name: Test previous WebAssembly specs
+      run: |
+        cd test
+        python3 run-spec-test.py --spec=v1.1
     - name: Test WASI apps
       run: cd test && python3 run-wasi-test.py
 
-  build-windows:
+  windows:
     runs-on: windows-latest
-    name: build-windows-${{ matrix.config.target }}
+    name: windows-${{ matrix.config.target }}
     timeout-minutes: 10
 
     strategy:
@@ -132,12 +144,16 @@ jobs:
       run: |
         cd test
         python run-spec-test.py
+    - name: Test previous WebAssembly specs
+      run: |
+        cd test
+        python run-spec-test.py --spec=v1.1
     - name: Test WASI apps
       run: |
         cd test
         python run-wasi-test.py
 
-  build-wasi:
+  wasi:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -192,7 +208,7 @@ jobs:
         cd test
         python3 run-wasi-test.py --fast --exec "../build/wasm3 --stack-size 2097152 ../build-wasi/wasm3.wasm"
 
-  build-ios:
+  ios:
     runs-on: macos-latest
     timeout-minutes: 10
 
@@ -207,9 +223,10 @@ jobs:
         cd platforms/ios
         xcodebuild build -scheme wasm3 -project wasm3.xcodeproj -configuration Release -destination 'platform=iOS Simulator,name=iPhone 11,OS=13.3'
 
-  build-android:
+  android:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     steps:
     - uses: actions/checkout@v2
     - uses: seanmiddleditch/gha-setup-ninja@master
@@ -224,8 +241,38 @@ jobs:
       run: |
         cd platforms/android
         ./gradlew build
-        
-  build-cosmopolitan:
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        path: wasm3
+    - name: Checkout pywasm3
+      uses: actions/checkout@v2
+      with:
+        repository: wasm3/pywasm3
+        path: pywasm3
+    - name: Set up Python
+      uses: actions/setup-python@v2
+    - name: Update and Build Python module
+      run: |
+        rm -rf ./pywasm3/wasm3
+        cp -r wasm3/source ./pywasm3/wasm3
+        pip install ./pywasm3
+    - name: Install WABT
+      run: |
+        sudo apt install wabt
+    - name: Test
+      run: |
+        pip install pytest
+        cd ./pywasm3
+        pytest
+
+  cosmopolitan:
     runs-on: ubuntu-20.04
     timeout-minutes: 10
 
@@ -263,9 +310,9 @@ jobs:
         cd test
         python3 run-wasi-test.py --fast --exec "wine ./wasm3-win.com"
 
-  build-cross-qemu:
+  cross-qemu:
     runs-on: ubuntu-20.04
-    name: build-cross-qemu-${{ matrix.config.target }}
+    name: cross-qemu-${{ matrix.config.target }}
     timeout-minutes: 10
 
     strategy:
@@ -279,7 +326,7 @@ jobs:
         - {target: riscv64, toolchain: gcc-riscv64-linux-gnu,     cc: riscv64-linux-gnu-gcc,      qemu: qemu-riscv64-static }
         - {target: ppc,     toolchain: gcc-powerpc-linux-gnu,     cc: powerpc-linux-gnu-gcc,      qemu: qemu-ppc-static     }
         - {target: ppc64,   toolchain: gcc-powerpc64-linux-gnu,   cc: powerpc64-linux-gnu-gcc,    qemu: qemu-ppc64-static   }
-        - {target: ppc64le, toolchain: gcc-powerpc64le-linux-gnu, cc: powerpc64le-linux-gnu-gcc,  qemu: qemu-ppc64le-static }
+        #- {target: ppc64le, toolchain: gcc-powerpc64le-linux-gnu, cc: powerpc64le-linux-gnu-gcc,  qemu: qemu-ppc64le-static }
         - {target: s390x,   toolchain: gcc-s390x-linux-gnu,       cc: s390x-linux-gnu-gcc,        qemu: qemu-s390x-static   }
         - {target: mips,    toolchain: gcc-mips-linux-gnu,          cc: mips-linux-gnu-gcc,         qemu: qemu-mips-static     }
         - {target: mips64,  toolchain: gcc-mips64-linux-gnuabi64,   cc: mips64-linux-gnuabi64-gcc,  qemu: qemu-mips64-static   }
@@ -320,14 +367,14 @@ jobs:
         cd test
         python3 run-wasi-test.py --fast --exec "${{ matrix.config.qemu }} ../build/wasm3"
 
-  build-platformio:
+  platformio:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v2
       with:
         python-version: '3.x'
     - name: Install PlatformIO
@@ -336,27 +383,27 @@ jobs:
         pip install -U platformio
     - name: Build AVR ATmega1284
       run: |
-        cd platforms/arduino
+        cd platforms/embedded/arduino
         pio run -e mega1284
         ! nm .pio/build/mega1284/firmware.elf | grep printf
     - name: Build ESP8266
       run: |
-        cd platforms/esp8266
+        cd platforms/embedded/esp8266
         pio run
     # TODO:
     #- name: Build ESP32
     #  run: |
-    #    cd platforms/esp32-pio
+    #    cd platforms/embedded/esp32-pio
     #    pio run
 
-  build-platformio-arm:
+  platformio-arm:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v2
       with:
         python-version: '3.x'
     - name: Install PlatformIO
@@ -365,29 +412,29 @@ jobs:
         pip install -U platformio
     - name: Build Arduino MKR1000
       run: |
-        cd platforms/arduino
+        cd platforms/embedded/arduino
         pio run -e mkr1000
     - name: Build Blue Pill (JeeH)
       run: |
-        cd platforms/bluepill
+        cd platforms/embedded/bluepill
         pio run
     - name: Build TinyBLE
       run: |
-        cd platforms/arduino
+        cd platforms/embedded/arduino
         pio run -e tinyBLE
     - name: Build MXChip AZ3166
       run: |
-        cd platforms/arduino
+        cd platforms/embedded/arduino
         pio run -e az3166
 
-  build-platformio-riscv:
+  platformio-riscv:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v2
       with:
         python-version: '3.x'
     - name: Install PlatformIO
@@ -396,14 +443,14 @@ jobs:
         pip install -U platformio
     - name: Build HiFive1
       run: |
-        cd platforms/hifive1
+        cd platforms/embedded/hifive1
         pio run
     - name: Build Sipeed MAIX
       run: |
-        cd platforms/arduino
+        cd platforms/embedded/arduino
         pio run -e maix
 
-  build-particle:
+  particle:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: "github.event_name == 'push'"
@@ -418,10 +465,10 @@ jobs:
       run: particle login --token $PARTICLE_TOKEN
     - name: Build Photon
       run: |
-        cd platforms/particle
+        cd platforms/embedded/particle
         particle compile --followSymlinks photon
 
-  build-esp32-idf:
+  esp32-idf:
     runs-on: ubuntu-latest
     container: igrr/idf-qemu:release-v4.0-esp-develop-20191228
     timeout-minutes: 10
@@ -431,13 +478,13 @@ jobs:
     - name: Build for ESP32 (IDF v4.0)
       run: |
         . $IDF_PATH/export.sh
-        cd platforms/esp32-idf
+        cd platforms/embedded/esp32-idf
         export EXTRA_CFLAGS="-Werror"
         idf.py build
       shell: bash
     - name: Test for ESP32 in QEMU
       run: |
-        cd platforms/esp32-idf
+        cd platforms/embedded/esp32-idf
         make-flash-img.sh wasm3 flash_img.bin
         qemu-system-xtensa -machine esp32 -nographic -drive file=flash_img.bin,if=mtd,format=raw -no-reboot | tee out.txt
         grep "Result: 46368" out.txt
@@ -446,10 +493,10 @@ jobs:
         test $(($(grep "ets Jun  8 2016" out.txt | wc -l))) -eq 1
     - name: Check that IDF and PIO examples are in sync
       run: |
-        diff -q platforms/esp32-idf/main/main.cpp platforms/esp32-pio/src/main.cpp
+        diff -q platforms/embedded/esp32-idf/main/main.cpp platforms/embedded/esp32-pio/src/main.cpp
       # TODO: also check that the build flags are in sync
 
-  build-cpp:
+  cpp:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -470,7 +517,7 @@ jobs:
           cd platforms/cpp/build
           ./wasm3_cpp_example
 
-  build-as-cpp:
+  as-cpp:
     name: maintenance (build as C++)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -488,7 +535,7 @@ jobs:
     - name: Test
       run: ./build/wasm3 ./test/wasi/simple/test.wasm
 
-  build-with-logs:
+  with-logs:
     name: maintenance (debug logs)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -516,7 +563,7 @@ jobs:
     - name: Test
       run: ./build/wasm3 ./test/wasi/simple/test.wasm > /dev/null
 
-  build-preprocessed-ops:
+  preprocessed-ops:
     name: maintenance (preprocess ops)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -538,28 +585,14 @@ jobs:
     - name: Test
       run: ./build/wasm3 ./test/wasi/simple/test.wasm
 
-  build-python:
-    runs-on: ubuntu-20.04
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [ "3.5", "3.6", "3.7", "3.8", "3.9" ]
-
+  spellcheck:
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v1
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Build Python module
+    - name: Set up Python
+      uses: actions/setup-python@v2
+    - name: Install codespell
       run: |
-        cd platforms/python
-        python setup.py sdist
-        pip install ./dist/pywasm3-*.tar.gz
-    - name: Install WABT
+        pip install codespell
+    - name: Spellcheck
       run: |
-        sudo apt install wabt
-    - name: Test
-      run: |
-        pip install pytest
-        pytest platforms/python
+        codespell
