@@ -67,7 +67,7 @@ Minimum useful system requirements: **~64Kb** for code and **~10Kb** RAM
 ☑ Big-Endian systems support  
 ☑ Self-hosting  
 ☑ Gas metering  
-☐ Multi-value  
+☑ Multi-value  
 ☐ Reference types  
 ☐ Bulk memory operations  
 ☐ Tail call optimization  
@@ -98,6 +98,7 @@ Wasm3 started as a research project and remains so by many means. Evaluating the
 ## Further Resources
 
 [Demos](./docs/Demos.md)  
+[Cookbook](./docs/Cookbook.md)  
 [Installation instructions](./docs/Installation.md)  
 [Build and Development instructions](./docs/Development.md)  
 [Supported Hardware](./docs/Hardware.md)  
