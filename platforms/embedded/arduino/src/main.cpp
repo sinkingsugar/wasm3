@@ -7,10 +7,9 @@
 
 #include "Arduino.h"
 
-#include "m3/wasm3.h"
-#include "m3/m3_config.h"
+#include "wasm3.h"
 
-#include "m3/extra/fib32.wasm.h"
+#include "extra/fib32.wasm.h"
 
 #define FATAL(func, msg) {           \
   Serial.print("Fatal: " func ": "); \
